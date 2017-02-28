@@ -833,6 +833,8 @@ func NewLexerWithInit(in io.Reader, initFun func(*Lexer)) *Lexer {
     }
     atEOF := false
     stopped := false
+
+loop:
     for {
       if n == len(buf) && !atEOF {
         r,_,err := in.ReadRune()
@@ -890,24 +892,18 @@ dollar:  // Handle $.
           text := string(buf[:matchn])
           buf = buf[matchn:]
           matchn = -1
-          for {
-            sent := false
-            select {
-              case ch <- frame{matchi, text, line, column}: {
-                sent = true
-              }
-              case stopped = <- ch_stop: {
-              }
-              default: {
-                // nothing
-              }
-            }
-            if stopped||sent {
-              break
-            }
+
+	  select {
+	    case <- ch_stop:
+              stopped = true
+              break loop
+            default:
           }
-          if stopped {
-            break
+          select {
+            case ch <- frame{matchi, text, line, column}:
+            case  <- ch_stop:
+              stopped = true
+	      break loop
           }
           if len(family[matchi].nest) > 0 {
             scan(bufio.NewReader(strings.NewReader(text)), ch, ch_stop, family[matchi].nest, line, column)
@@ -925,7 +921,18 @@ dollar:  // Handle $.
         }
       }
     }
-    ch <- frame{-1, "", line, column}
+    select {
+      case <- ch_stop:
+        stopped = true
+      default:
+    }
+    if !stopped {
+    select {
+      case ch <- frame{-1, "", line, column}:
+     
+      case <- ch_stop:
+      }
+    }
   }
   go scan(bufio.NewReader(in), yylex.ch, yylex.ch_stop, dfas, 0, 0)
   return yylex
