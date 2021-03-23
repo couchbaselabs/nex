@@ -769,6 +769,7 @@ type frame struct {
   i int
   s string
   line, column int
+  offset int
 }
 type Lexer struct {
   // The lexer runs in its own goroutine, and communicates via channel 'ch'.
